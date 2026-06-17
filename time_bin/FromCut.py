@@ -15,6 +15,18 @@ start = time.time()
 
 def format_time:
 
+def draw_FullTrace(trace):
+    fig, axes = plt.subplots(nrows=7, ncols=1, figsize=(12,12), sharey=True)
+
+    for i in range(6):
+        axes[i].plot(traces[10000*i:10000*(i+1)])
+    axes[6].plot(np.concatenate((traces[60000:], np.zeros(70000-len(traces))), axis=None))
+
+    rect = Rectangle((len(traces)-60000, -0.001), (70000-len(traces)),0.002, fc="lightgray")
+    axes[6].add_patch(rect)
+
+    plt.show()
+
 
 #User arguments
 if len(sys.argv) not in (3, 4):
