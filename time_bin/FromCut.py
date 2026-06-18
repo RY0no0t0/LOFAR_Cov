@@ -13,7 +13,28 @@ from datetime import timedelta
 #start the time counter
 start = time.time()
 
-def format_time:
+def format_time(sec):
+    td = timedelta(seconds=int(round(sec)))
+    td_str = str(td)
+    days = 0
+
+    if "day" in td_str:
+        day_part, time_part = td_str.split(", ")
+        days = int(day_part.split()[0])
+        h, m, s = time_part.split(":")
+    else:
+        h, m, s = td_str.split(":")
+
+    parts = []
+    if days:
+        parts.append(f"{days} d")
+    if int(h) or days:
+        parts.append(f"{int(h)} h")
+    if int(m) or int(h) or days:
+        parts.append(f"{int(m)} min")
+    parts.append(f"{int(float(s))} sec")
+
+    return " ".join(parts)
 
 def draw_FullTrace(trace):
     fig, axes = plt.subplots(nrows=7, ncols=1, figsize=(12,12), sharey=True)
@@ -49,3 +70,12 @@ if os.path.exists(dirname) == False:
 
 #Read trace
 traces = pd.read_csv(trace_name, delimiter="\t")
+
+
+# Print time
+middle = time.time()
+elapsed = middle-start
+print(f"Set up MCMC: {elapsed}", flush=True)
+fn_time = os.path.join(dirname, "time.txt")
+with open(fn_time, 'w') as f:
+    f.write(f"Set up MCMC: {elapsed}\n")
