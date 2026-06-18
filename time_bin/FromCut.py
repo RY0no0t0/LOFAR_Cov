@@ -92,12 +92,12 @@ def draw_FullTrace(trace, dirname):
 
     for i in range(rows-1):
         axes[i].plot(traces[10000*i:10000*(i+1)])
-    axes[-1].plot(np.concatenate((traces[(rows-1)*10000], np.zeros(rows*10000-len(traces))), axis=None))
+    axes[-1].plot(np.concatenate((traces[(rows-1)*10000:], np.zeros(rows*10000-len(traces))), axis=None))
 
     rect = Rectangle((len(traces)-(rows-1)*10000, -0.001), (rows*10000-len(traces)), 0.002, fc="lightgray")
     axes[-1].add_patch(rect)
 
-    fn = os.path(dirname, "full_trace.pdf")
+    fn = os.path.join(dirname, "full_trace.pdf")
     plt.savefig(fn, format="pdf")
     plt.close()
 
@@ -110,7 +110,9 @@ def draw_cov(trace, trim, ratios, durs, dirname):
     cutsN = len(cuts)
     dursN = len(durs)
 
-    covs = []
+    dircovname = os.path.join(dirname, "Covs")
+    if os.path.exists(dircovname) == False:
+        os.mkdir(dircovname)
 
     fig, axes = plt.subplots(nrows=cutsN, ncols=dursN, figsize=(5*dursN, 4*cutsN))
 
@@ -123,17 +125,15 @@ def draw_cov(trace, trim, ratios, durs, dirname):
             if i==cutsN-1:
                 axes[cutsN-1, j].set_xlabel(f"duration={durs[j]} bins")
 
-            cov_name = f"Covs/Cov_"+ratios_string[i]+f"_{durs[j]}.npy"
-            fn_cov = os.path(dirname, cov_name)
-            np.save()
+            cov_name = f"Cov_"+ratios_string[i]+f"_{durs[j]}.npy"
+            fn_cov = os.path.join(dircovname, cov_name)
+            np.save(fn_cov, cov)
 
         axes[i,0].set_ylabel(f"cut=maxamp/{ratios[i]}")
 
-    fn = os.path(dirname, "cov.pdf")
+    fn = os.path.join(dirname, "cov.pdf")
     plt.savefig(fn, format="pdf")
     plt.close()
-
-    fn_cov = os.path(dirname, "Covs.npy")
 
     fig, axes = plt.subplots(nrows=cutsN, ncols=1, figsize=(12, 2*cutsN))
 
@@ -143,7 +143,7 @@ def draw_cov(trace, trim, ratios, durs, dirname):
         axes[i].axhline(y=-cuts[i], color="tab:red")
         axes[i].set_ylabel(f"cut=maxamp/{ratios[i]}")
 
-    fn = os.path(dirname, "cut.pdf")
+    fn = os.path.join(dirname, "cut.pdf")
     plt.savefig(fn, format="pdf")
     plt.close()
 
@@ -162,9 +162,9 @@ if len(sys.argv) != 6:
 trace_name = sys.argv[1]
 foldername = sys.argv[2]
 dirname = "results/"+foldername
-trim = sys.argv[3]
+trim = int(sys.argv[3])
 ratios = np.array([float(x) for x in sys.argv[4].split(",")])
-durs = np.array([float(x) for x in sys.argv[5].split(",")])
+durs = np.array([int(x) for x in sys.argv[5].split(",")])
 
 print("Output Directory %s" % dirname, flush=True)
 if os.path.exists(dirname) == False:
@@ -190,7 +190,7 @@ draw_cov(traces, trim, ratios, durs, dirname)
 # Print time
 middle = time.time()
 elapsed = middle-start
-print(f"FinishedCovariance Matrix: {elapsed}", flush=True)
+print(f"Finished Covariance Matrix: {elapsed}", flush=True)
 fn_time = os.path.join(dirname, "time.txt")
 with open(fn_time, 'a') as f:
     f.write(f"Finished Covariance Matrix: {elapsed}\n")
