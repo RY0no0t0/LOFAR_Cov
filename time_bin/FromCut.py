@@ -147,7 +147,10 @@ def draw_cov(trace, trim, ratios, durs, dirname):
     plt.savefig(fn, format="pdf")
     plt.close()
 
-
+current = os.getcwd()
+bigfolder = os.path.join(current, "results/cuts")
+if os.path.exists(bigfolder) == False:
+    os.mkdir(bigfolder)
 
 #User arguments
 if len(sys.argv) != 6:
@@ -161,7 +164,7 @@ if len(sys.argv) != 6:
 
 trace_name = sys.argv[1]
 foldername = sys.argv[2]
-dirname = "results/"+foldername
+dirname = os.path.join(bigfolder, foldername)
 trim = int(sys.argv[3])
 ratios = np.array([float(x) for x in sys.argv[4].split(",")])
 durs = np.array([int(x) for x in sys.argv[5].split(",")])
