@@ -14,28 +14,75 @@ from datetime import timedelta
 #start the time counter
 start = time.time()
 
-def format_time(sec):
-    td = timedelta(seconds=int(round(sec)))
-    td_str = str(td)
-    days = 0
+# def format_time(sec):
+#     td = timedelta(seconds=int(round(sec)))
+#     td_str = str(td)
+#     days = 0
 
-    if "day" in td_str:
-        day_part, time_part = td_str.split(", ")
-        days = int(day_part.split()[0])
-        h, m, s = time_part.split(":")
-    else:
-        h, m, s = td_str.split(":")
+#     if "day" in td_str:
+#         day_part, time_part = td_str.split(", ")
+#         days = int(day_part.split()[0])
+#         h, m, s = time_part.split(":")
+#     else:
+#         h, m, s = td_str.split(":")
 
-    parts = []
-    if days:
-        parts.append(f"{days} d")
-    if int(h) or days:
-        parts.append(f"{int(h)} h")
-    if int(m) or int(h) or days:
-        parts.append(f"{int(m)} min")
-    parts.append(f"{int(float(s))} sec")
+#     parts = []
+#     if days:
+#         parts.append(f"{days} d")
+#     if int(h) or days:
+#         parts.append(f"{int(h)} h")
+#     if int(m) or int(h) or days:
+#         parts.append(f"{int(m)} min")
+#     parts.append(f"{int(float(s))} sec")
 
-    return " ".join(parts)
+#     return " ".join(parts)
+
+def get_real(trace, cut, duration, start):
+    s = start
+    while True:
+        if s+duration >= len(trace):
+            raise IndexError(f"Index exceeded: {s+duration}")
+        real = trace[s:s+duration]
+        if np.abs(real).max() < cut:
+            break
+        else:
+            s = np.where(np.abs(real) >= cut)[0][-1]+1+s
+
+    return real, s+duration
+
+def get_reals(trace, cut, duration):
+    s = 0
+    reals = []
+    while True:
+        try:
+            real, end = get_real(trace, cut, duration, s)
+        except IndexError:
+            break
+        else:
+            reals.append(real)
+            s = end
+    
+    to_return = np.array(reals)
+    print(f"Number of realizations: {len(to_return)}")
+    return to_return
+
+def make_cov(trace, cut, duration):
+    reals = get_reals(trace, cut, duration)
+    N = len(reals)
+
+    if N==0:
+        return np.zeros((duration, duration)), N
+    
+    mus = np.average(reals, axis=0)
+    diffs = reals-mus
+
+    cov = np.empty((duration, duration))
+    for i in range(duration):
+        for j in range(duration-i):
+            cov[i, i+j] = np.sum(diffs[:,i]*diffs[:,j])/N
+            cov[i+j,j] = cov[i,i+j]
+
+    return cov, N
 
 def draw_FullTrace(trace, dirname):
     plt.figure()
@@ -54,15 +101,16 @@ def draw_FullTrace(trace, dirname):
     plt.savefig(fn, format="pdf")
     plt.close()
 
-def draw_cov():
-    tc = traces[6000:-6000].reset_index(drop=True).values.flatten()
+def draw_cov(trace, trim, ratios, durs, dirname):
+    tc = trace[trim:-trim].reset_index(drop=True).values.flatten()
     maxamp = np.abs(tc).max()
-    ratios = np.array([2.3, 2.7, 3.1, 3.5])
     cuts = maxamp/ratios
-    durs = np.array([200, 500, 1000, 1500])
+    ratios_string = np.char.replace(ratios.astype(str), '.', '-')
 
     cutsN = len(cuts)
     dursN = len(durs)
+
+    covs = []
 
     fig, axes = plt.subplots(nrows=cutsN, ncols=dursN, figsize=(5*dursN, 4*cutsN))
 
@@ -70,19 +118,22 @@ def draw_cov():
         for j in range(dursN):
             cov, N = make_cov(tc, cuts[i], durs[j])
             sns.heatmap(cov, xticklabels=False, yticklabels=False, ax=axes[i,j], square=True, cmap="bwr", norm=colors.CenteredNorm())
-            # if N != 0:
-            #     sns.heatmap(cov, xticklabels=False, yticklabels=False, ax=axes[i,j], square=True, cmap="bwr", norm=colors.CenteredNorm())
-            # else:
-            #     sns.heatmap(cov, xticklabels=False, yticklabels=False, ax=axes[i,j], square=True, cmap=["white"], linecolor="lightgray", linewidths=1, cbar=False)
             axes[i,j].set_title(f"N={N}")
 
             if i==cutsN-1:
-                axes[cutsN-1, j].set_xlabel(f"duration={durs[j]} units")
+                axes[cutsN-1, j].set_xlabel(f"duration={durs[j]} bins")
+
+            cov_name = f"Covs/Cov_"+ratios_string[i]+f"_{durs[j]}.npy"
+            fn_cov = os.path(dirname, cov_name)
+            np.save()
 
         axes[i,0].set_ylabel(f"cut=maxamp/{ratios[i]}")
 
-    plt.show()
+    fn = os.path(dirname, "cov.pdf")
+    plt.savefig(fn, format="pdf")
     plt.close()
+
+    fn_cov = os.path(dirname, "Covs.npy")
 
     fig, axes = plt.subplots(nrows=cutsN, ncols=1, figsize=(12, 2*cutsN))
 
@@ -92,25 +143,28 @@ def draw_cov():
         axes[i].axhline(y=-cuts[i], color="tab:red")
         axes[i].set_ylabel(f"cut=maxamp/{ratios[i]}")
 
-    plt.show()
+    fn = os.path(dirname, "cut.pdf")
+    plt.savefig(fn, format="pdf")
     plt.close()
 
 
 
 #User arguments
-if len(sys.argv) not in (3, 4):
-    print("User argument must include \n 1. Name of the file of the trace \n" \
-    "2. Name of output folder \n (3. Number of units trimmed at the beginning and at the end of trace: Default 6000)")
+if len(sys.argv) != 6:
+    print("User argument must include \n" \
+    "1. Name of the file of the trace \n" \
+    "2. Name of output folder \n" \
+    "3. Number of units trimmed at the beginning and at the end of trace: Default 6000 \n" \
+    "4. List of ratios relative to max amplitude for cuts (without [] separated by commas and no space) \n" \
+    "5. List of number of bins as noise window (formatted the same)")
     sys.exit(1)
 
 trace_name = sys.argv[1]
 foldername = sys.argv[2]
 dirname = "results/"+foldername
-
-if len(sys.argv) == 4:
-    trim = sys.argv[3]
-else:
-    trim = 6000
+trim = sys.argv[3]
+ratios = np.array([float(x) for x in sys.argv[4].split(",")])
+durs = np.array([float(x) for x in sys.argv[5].split(",")])
 
 print("Output Directory %s" % dirname, flush=True)
 if os.path.exists(dirname) == False:
@@ -130,3 +184,13 @@ fn_time = os.path.join(dirname, "time.txt")
 with open(fn_time, 'w') as f:
     f.write(f"Making Covariance Matrix: {elapsed}\n")
 
+#Make Covariance Matrix and Plot them
+draw_cov(traces, trim, ratios, durs, dirname)
+
+# Print time
+middle = time.time()
+elapsed = middle-start
+print(f"FinishedCovariance Matrix: {elapsed}", flush=True)
+fn_time = os.path.join(dirname, "time.txt")
+with open(fn_time, 'a') as f:
+    f.write(f"Finished Covariance Matrix: {elapsed}\n")
