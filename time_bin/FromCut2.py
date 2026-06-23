@@ -109,7 +109,7 @@ def draw_cov(trace, trim, ratios, durs, dirname):
 
     fig, axes = plt.subplots(nrows=cutsN, ncols=dursN, figsize=(5*dursN, 4*cutsN))
 
-    axes = np.atleast_1d(axes)
+    axes = np.atleast_2d(axes)
 
     for i in range(cutsN):
         for j in range(dursN):
