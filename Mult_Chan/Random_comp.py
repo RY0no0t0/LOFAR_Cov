@@ -57,7 +57,6 @@ def make_cov(trace, duration, sig_window):
     new_trace = remove_signal(trace, sig_window)
     reals = np.array(get_reals(new_trace, duration))
     N = len(reals)
-    print(f"Number of realizations: {N}")
 
     if N==0:
         return np.zeros((duration, duration)), N
@@ -86,7 +85,6 @@ def get_covs(traces, size, dur, sig_window, dirname):
         # cov_name = f"Cov_{dur}.npy"
         # fn_cov = os.path.join(dircovname, cov_name)
         # np.save(fn_cov, cov)
-    
 
     # Print time
     middle = time.time()
@@ -139,7 +137,7 @@ def draw_cov(covs, size, N, dur, stns, chns, dirname):
         f.write(f"Finished Drawing Matrices: {elapsed}\n")
     
 
-def draw_1D(covs, size, time, dur, stns, chns, dirname):
+def draw_1D(covs, size, x_time, dur, stns, chns, dirname):
     # Print time
     middle = time.time()
     elapsed = middle-start
@@ -164,15 +162,15 @@ def draw_1D(covs, size, time, dur, stns, chns, dirname):
             axes[row, col].set_ylabel(r"Cov($\Delta t_{i,j}$)")
 
         if j < size:
-            axes[row, col].plot(time[:50], covs[j][0,:50])
-            axes[row, col].scatter(time[:50], covs[j][0,:50], marker=".")
+            axes[row, col].plot(x_time[:50], covs[j][0,:50])
+            axes[row, col].scatter(x_time[:50], covs[j][0,:50], marker=".")
             axes[row, col].set_title(f"{stns[j]}-{chns[j]}")
         else:
             axes[row, col].set_visible(False)
             axes[row-1, col].set_xlabel(r"$\Delta t_{i,j}$ [ns]")
             axes[row-1, col].tick_params(labelbottom=True)
     
-    plt.suptitle(f"1D function of the first row. Size: {dur} ({dur*5} ns), {N} realizations")
+    plt.suptitle(f"1D function of the first row for first 50 bins. Size: {dur} ({dur*5} ns), {N} realizations")
     plt.tight_layout()
 
     fn = os.path.join(dirname, "1d.pdf")
@@ -187,7 +185,7 @@ def draw_1D(covs, size, time, dur, stns, chns, dirname):
     with open(fn_time, 'a') as f:
         f.write(f"Finished Drawing 1D plot: {elapsed}\n")
 
-def overplot_1D(covs, size, time, dur, stns, chns, dirname):
+def overplot_1D(covs, size, x_time, dur, stns, chns, dirname):
     # Print time
     middle = time.time()
     elapsed = middle-start
@@ -199,12 +197,13 @@ def overplot_1D(covs, size, time, dur, stns, chns, dirname):
     # Plot!
     plt.figure(figsize=(12, 8))
     for i in range(50):
-        plt.axvline(x=time[i], color="lightgray", linestyle="--")
+        plt.axvline(x=x_time[i], color="lightgray", linestyle="--")
     plt.axhline(y=0, color="lightgray")
     for j in range(size):
-        plt.plot(time[:50], covs[j][0,:50], label=f"{stns[j]}-{chns[j]}")
-        plt.scatter(time[:50], covs[j][0,:50], marker=".")
+        plt.plot(x_time[:50], covs[j][0,:50], label=f"{stns[j]}-{chns[j]}")
+        plt.scatter(x_time[:50], covs[j][0,:50], marker=".")
     plt.legend()
+    plt.title(f"Overplotting 1D functions for first 50 bins (size: {dur}, {size} antennas)")
 
     fn = os.path.join(dirname, "overplot.pdf")
     plt.savefig(fn, format="pdf")
@@ -220,16 +219,16 @@ def overplot_1D(covs, size, time, dur, stns, chns, dirname):
 
 
 current = os.getcwd()
-bigfolder = os.path.join(current, "results/remove")
+bigfolder = os.path.join(current, "results/random")
 if os.path.exists(bigfolder) == False:
     os.mkdir(bigfolder)
 
 #User arguments
 if len(sys.argv) != 7:
     print("User argument must include \n" \
-    "1. Name of the file of the trace \n" \
+    "1. Name of the folder of the traces \n" \
     "2. Name of output folder \n" \
-    "3. Number of units trimmed at the beginning and at the end of trace \n" \
+    "3. Number of bins trimmed at the beginning and at the end of trace \n" \
     "4. Number of bins as noise window \n" \
     "5. Signal window in units of bins \n" \
     "6. Number of channels to compare")
@@ -259,13 +258,13 @@ with open(fn_time, 'w') as f:
     f.write(f"Read data: {elapsed}\n")
 
 # Make covariance matrix
-covs, N = get_covs(traces, size, dur, sig_window, "yeah")
+covs, N = get_covs(traces, size, dur, sig_window, dirname)
 
 # Plots
 draw_cov(covs, size, N, dur, stns, chns, dirname)
-time = traces[0,0] # For x-axis (Maybe I should check that all traces[i,0] are the same)
-draw_1D(covs, size, time, dur, stns, chns, dirname)
-overplot_1D(covs, size, time, dur, stns, chns, dirname)
+x_time = traces[0,0] # For x-axis (Maybe I should check that all traces[i,0] are the same)
+draw_1D(covs, size, x_time, dur, stns, chns, dirname)
+overplot_1D(covs, size, x_time, dur, stns, chns, dirname)
 
 # Print time
 middle = time.time()
