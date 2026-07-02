@@ -352,10 +352,10 @@ class NuRadioRecoReader:
 if __name__ == "__main__":
 
     # NOTE: modify this to the path where you save the LOFAR antenna response.
-    path_to_response = "/cr/users/kwatanabe/Projects/radio-ift/radio_resources/lofar/antenna_response"
+    path_to_response = "/home/rkitahara/Research/Cov/test_simulation/antenna_response_lofar"
 
      # NOTE: modify this to the path where you save the coreas simulation file. This is just an example path, you need to change it to your own.
-    path_to_coreas_sim_file = "/cr/users/kwatanabe/Projects/radio-ift/radio_resources/lofar/hdf5_sims/93970574/0/proton/SIM000018.hdf5"
+    path_to_coreas_sim_file = "/home/rkitahara/Research/Cov/test_simulation/93970574/0/proton/SIM000018.hdf5"
 
     det = detector.Detector(
         "LOFAR/LOFAR.json", source="json", antenna_by_depth=False
