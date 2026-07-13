@@ -642,7 +642,7 @@ class NuRadioRecoReader:
         # plot the footprint
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        sc = ax.scatter(positions[:, 0], positions[:, 1], c = fluences, cmap=fluence_cmap, norm=fluence_norm, s=80.0, edgecolor='black', linewidth=0.5, zorder=10)
+        sc = ax.scatter(positions[:, 0], positions[:, 1], c = fluences, cmap=fluence_cmap, marker=".", norm=fluence_norm, s=80.0, edgecolor='black', linewidth=0.5, zorder=10)
         ax.tick_params(axis='both', which='major', labelsize=20, size=6)
         ax.tick_params(axis='both', which='minor', labelsize=20, size=4)
 
@@ -670,18 +670,18 @@ class NuRadioRecoReader:
 
         ax.pcolormesh(XI, YI, ZI, norm=fluence_norm, cmap=fluence_cmap, alpha=0.9, shading='auto', zorder=0)
 
-        ax.set_xlim([-300, 300])
-        ax.set_ylim([-300, 300])
+        ax.set_xlim([-150, 150])
+        ax.set_ylim([-150, 150])
 
         fig.savefig(os.path.join(savefig_path, "footprint.png"), dpi=200, bbox_inches='tight')
 
 if __name__ == "__main__":
 
     # NOTE: modify this to the path where you save the LOFAR antenna response.
-    path_to_response = "/cr/users/kwatanabe/Projects/radio-ift/radio_resources/lofar/antenna_response"
+    path_to_response = "/home/rkitahara/Research/Cov/test_simulation/antenna_response_lofar"
 
      # NOTE: modify this to the path where you save the coreas simulation file. This is just an example path, you need to change it to your own.
-    path_to_coreas_sim_file = "/cr/users/kwatanabe/Projects/radio-ift/radio_resources/lofar/hdf5_sims/93970574/0/proton/SIM000018.hdf5"
+    path_to_coreas_sim_file = "/home/rkitahara/Research/Cov/test_simulation/93970574/0/proton/SIM000018.hdf5"
 
     det = detector.Detector(
         "LOFAR/LOFAR.json", source="json", antenna_by_depth=False
@@ -713,4 +713,4 @@ if __name__ == "__main__":
     # # example how to plot the voltage traces after noise addition
     # nu_radio_reader.plot_all_traces(mc_data_evt, det, savefig_path="./plots_after_noise")
      # example how to plot the voltage traces after noise addition
-    nu_radio_reader.plot_footprint(mc_data_evt, det, input_file=path_to_coreas_sim_file, savefig_path="./plots_after_noise")
+    nu_radio_reader.plot_footprint(mc_data_evt, det, input_file=path_to_coreas_sim_file, savefig_path="../plots_after_noise")
