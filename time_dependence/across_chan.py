@@ -4,222 +4,139 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import pandas as pd
 import seaborn as sns
+import h5py
 import os
 import sys
 import random
 import time
+from itertools import groupby
 
 #start the time counter
 start = time.time()
 
-def get_random_channel(size):
-    #87, 87, 85, 87, 87, 85
-    stns = []
-    chns = []
-    for i in range(size):
-        stn = int(6*random.random())
-        stns.append(stn)
-        if stn in (2,5):
-            chns.append(int(86*random.random()))
-        else:
-            chns.append(int(88*random.random()))
+def add_timestamp(start, fn_time, string):
+    middle = time.time()
+    elapsed = middle-start
+    print(string+f": {elapsed}", flush=True)
+    with open(fn_time, 'a') as f:
+        f.write(string+f": {elapsed}\n")
 
-    return stns, chns
 
-def modify_data(data, trim):
-    modified = pd.concat([data.columns.to_frame().T, data]).reset_index(drop=True).iloc[:,0].str.split(expand=True).astype(float)
-    return modified.values[trim:-trim].T
-
-def read_files(size, foldername, trim):
-    stns, chns = get_random_channel(size)
-
-    for i in range(size):
-        fn = f"traces_station{stns[i]}_channel{chns[i]}_pol{chns[i]%2}.dat"
-        data = pd.read_csv(foldername+"/"+fn, delimiter="\t")
-        modified = modify_data(data, trim)
-
-        if i == 0:
-            traces = np.empty((size, *modified.shape))
-        
-        traces[i] = modified
+def format_consecutive_ranges(numbers):
+    sorted_nums = sorted(set(numbers)) 
+    ranges = []
     
-    return traces, stns, chns
+    # Group numbers where (number - index) is identical
+    for _, g in groupby(enumerate(sorted_nums), lambda pair: pair[1] - pair[0]):
+        group = [t[1] for t in g]
+        
+        if len(group) > 1:
+            ranges.append(f"{group[0]}-{group[-1]}")
+        else:
+            ranges.append(str(group[0]))
+            
+    return ", ".join(ranges)
 
-def remove_signal(trace, sig_window):
-    sig = np.argmax(trace)
-    return np.delete(trace, np.arange(sig-sig_window,sig+sig_window+1))
+def check_empty_channels(traces, fn_time):
 
-def get_reals(trace, dur):
-    to_consider = trace[:-(len(trace)%dur)]
-    return np.split(to_consider, len(to_consider)/dur)
+    for i in range(traces.shape[0]):
+        all0 = []
+        one0 = []
+        for j in range(traces.shape[1]):
+            if (traces[i,j,j%2]==0).all() and (traces[i,j,(j+1)%2]==0).all():
+                all0.append(j)
+            elif (traces[i,j,j%2]==0).all() or (traces[i,j,(j+1)%2]==0).all():
+                one0.append(j)
+        print(f"stn {i} | empty channels:{format_consecutive_ranges(all0)} | one polarization empty: {format_consecutive_ranges(one0)}", flush=True)
+        with open(fn_time, 'a') as f:
+            f.write(f"stn {i} | empty channels:{format_consecutive_ranges(all0)} | one polarization empty: {format_consecutive_ranges(one0)} \n")
 
-def make_cov(trace, duration, sig_window):
-    new_trace = remove_signal(trace, sig_window)
-    reals = np.array(get_reals(new_trace, duration))
+def modify_data(raw_traces, trim):
+    new = raw_traces.reshape(-1, 2, raw_traces.shape[-1]) #stack all stations together
+    deleted = new[~np.any(np.all(new==0,axis=2), axis=1)] #delete all channels if at least one of the polarization has all 0 data
+    reduced = deleted.reshape(-1, deleted.shape[-1]) #stack all polarizations together, making it 2D array of (channels, time_bins)
+    return reduced[:, trim:-trim]
+
+def read_file(fn):
+    try:
+        with h5py.File(fn, 'r') as f:
+            traces = f["traces"][:9]
+            if traces.shape[2] != 2 or np.argmax(traces.shape)!= 3:
+                print(f"{fn}: The shape seems to mismatch, got {traces.shape}. It should be (stn, chn, 2(pol), time_bin (biggest))")
+                sys.exit(1)
+            return traces
+    except Exception as e:
+        print(f"{fn}: SKIPPED (File is corrupted or invalid HDF5)")
+        sys.exit(1)
+
+def calc_rms(trace, length):
+    return np.sqrt(np.mean(np.square(trace[:length])))
+
+def remove_signal(trace, sig_window, rms, threshold):
+    if np.max(trace)/rms > threshold:
+        sig = np.argmax(trace)
+        return np.delete(trace, np.arange(sig-sig_window,sig+sig_window+1)), True
+    return trace, False
+
+def get_reals(traces, dur, sig_window, rms, threshold, fn_time):
+    reals = []
+    n_removed = 0
+    for trace in traces:
+        new, rem = remove_signal(trace, sig_window, rms, threshold)
+        to_consider = new[:-(len(new)%dur)]
+        reals.append(np.split(to_consider, len(to_consider)/dur))
+        if rem:
+            n_removed += 1
+        
+    print(f"{n_removed}/{len(traces)} had above SNR {threshold} signal", flush=True)
+    with open(fn_time, 'a') as f:
+        f.write(f"{n_removed}/{len(traces)} had above SNR {threshold} signal \n")
+
+    return np.vstack(reals)
+
+def make_cov(traces, duration, sig_window, rms_window, threshold, fn_time):
+    rms = calc_rms(traces[0], rms_window)
+    reals = np.array(get_reals(traces, duration, sig_window, rms, threshold, fn_time))
     N = len(reals)
 
     if N==0:
         return np.zeros((duration, duration)), N
 
     return np.cov(reals.T), N
-
-def get_covs(traces, size, dur, sig_window, dirname):
-    # Print time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Making Covariance Matrices: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Making Covariance Matrices: {elapsed}\n")
-
-    covs = [None]*size
-
-    # dircovname = os.path.join(dirname, "Covs")
-    # if os.path.exists(dircovname) == False:
-    #     os.mkdir(dircovname)
-
-    for j in range(size):
-        cov, N = make_cov(traces[j,1], dur, sig_window)
-        covs[j] = cov
-
-        # cov_name = f"Cov_{dur}.npy"
-        # fn_cov = os.path.join(dircovname, cov_name)
-        # np.save(fn_cov, cov)
-
-    # Print time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Finished making matrices: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Finished making matrices: {elapsed}\n")
-
-    return covs, N
     
-def draw_cov(covs, size, N, dur, stns, chns, dirname):
-    #Print time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Drawing Covariance Matrices: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Drawing Covariance Matrices: {elapsed}\n")
-    
+def draw_cov(cov, N, dur, dirname, evt_name):
     # Make plots
-    rownum = size//3+1
-    fig, axes = plt.subplots(nrows=rownum, ncols=3, figsize=(12, 3*rownum))
-
-    axes = np.atleast_2d(axes)
-
-    for j in range(rownum*3):
-        row = j//3
-        col = j%3
-
-        if j < size:
-            sns.heatmap(covs[j], xticklabels=False, yticklabels=False, ax=axes[row, col], square=True, cmap="bwr", norm=colors.CenteredNorm())
-            axes[row, col].set_title(f"{stns[j]}-{chns[j]}")
-        else:
-            axes[row, col].set_visible(False)
-    
-    plt.suptitle(f"Size: {dur} ({dur*5} ns), {N} realizations")
+    plt.figure()
+    sns.heatmap(cov, xticklabels=False, yticklabels=False, square=True, cmap="bwr", norm=colors.CenteredNorm())
+    plt.suptitle(evt_name)
+    plt.title(f"Size: {dur} ({dur*5} ns), {N} realizations")
     plt.tight_layout()
 
-    fn = os.path.join(dirname, "covs.png")
+    fn = os.path.join(dirname, "cov.png")
     plt.savefig(fn, dpi=300, bbox_inches='tight')
     plt.close()
-
-    # Print time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Finished Drawing Matrices: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Finished Drawing Matrices: {elapsed}\n")
     
 
-def draw_1D(covs, size, x_time, dur, stns, chns, dirname):
-    # Print time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Drawing 1D plots: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Drawing 1D plots: {elapsed}\n")
-    
+def draw_1D(cov, x_time, dur, dirname, evt_name):
     # Plot!
-    rownum = size//3+1
-    fig, axes = plt.subplots(nrows=rownum, ncols=3, figsize=(12, 3*rownum), sharex=True, sharey=True)
+    plt.figure(figsize=(12,6))
+    plt.axhline(y=0, c="gray", linestyle="--")
+    plt.plot(x_time[:50], cov[0, :50])
+    plt.scatter(x_time[:50], cov[0, :50], marker=".")
 
-    axes = np.atleast_2d(axes)
-
-    for j in range(rownum*3):
-        row = j//3
-        col = j%3
-
-        if row == rownum-1:
-            axes[row, col].set_xlabel(r"$\Delta t_{i,j}$ [ns]")
-        if col == 0:
-            axes[row, col].set_ylabel(r"Cov($\Delta t_{i,j}$)")
-
-        if j < size:
-            axes[row, col].plot(x_time[:50], covs[j][0,:50])
-            axes[row, col].scatter(x_time[:50], covs[j][0,:50], marker=".")
-            axes[row, col].set_title(f"{stns[j]}-{chns[j]}")
-        else:
-            axes[row, col].set_visible(False)
-            axes[row-1, col].set_xlabel(r"$\Delta t_{i,j}$ [ns]")
-            axes[row-1, col].tick_params(labelbottom=True)
+    plt.xlabel(r"$\Delta t_{i,j}$ [ns]")
+    plt.ylabel(r"Cov($\Delta t_{i,j}$)")
     
-    plt.suptitle(f"1D function of the first row for first 50 bins. Size: {dur} ({dur*5} ns), {N} realizations")
+    plt.suptitle(evt_name)
+    plt.title(f"1D function of the first row for first 50 bins. Size: {dur} ({dur*5} ns), {N} realizations")
     plt.tight_layout()
 
     fn = os.path.join(dirname, "1d.pdf")
     plt.savefig(fn, format="pdf")
     plt.close()
 
-    # Print Time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Finished Drawing 1D plot: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Finished Drawing 1D plot: {elapsed}\n")
-
-def overplot_1D(covs, size, x_time, dur, stns, chns, dirname):
-    # Print time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Drawing 1D plots: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Drawing 1D plots: {elapsed}\n")
-
-    # Plot!
-    plt.figure(figsize=(12, 8))
-    for i in range(50):
-        plt.axvline(x=x_time[i], color="lightgray", linestyle="--")
-    plt.axhline(y=0, color="lightgray")
-    for j in range(size):
-        plt.plot(x_time[:50], covs[j][0,:50], label=f"{stns[j]}-{chns[j]}")
-        plt.scatter(x_time[:50], covs[j][0,:50], marker=".")
-    plt.legend()
-    plt.title(f"Overplotting 1D functions for first 50 bins (size: {dur}, {size} antennas)")
-
-    fn = os.path.join(dirname, "overplot.pdf")
-    plt.savefig(fn, format="pdf")
-    plt.close()
-
-    # Print Time
-    middle = time.time()
-    elapsed = middle-start
-    print(f"Finished Drawing overplot: {elapsed}", flush=True)
-    fn_time = os.path.join(dirname, "time.txt")
-    with open(fn_time, 'a') as f:
-        f.write(f"Finished Drawing overplot: {elapsed}\n")
-
-
 current = os.getcwd()
-bigfolder = os.path.join(current, "results/random")
+bigfolder = os.path.join(current, "results/Covs")
 if os.path.exists(bigfolder) == False:
     os.mkdir(bigfolder)
 
@@ -227,27 +144,30 @@ if os.path.exists(bigfolder) == False:
 if len(sys.argv) != 7:
     print("User argument must include \n" \
     "1. Name of the folder of the traces \n" \
-    "2. Name of output folder \n" \
-    "3. Number of bins trimmed at the beginning and at the end of trace \n" \
-    "4. Number of bins as noise window \n" \
-    "5. Signal window in units of bins \n" \
-    "6. Number of channels to compare")
+    "2. Number of bins trimmed at the beginning and at the end of trace \n" \
+    "3. Number of bins as noise window \n" \
+    "4. Signal window in units of bins \n" \
+    "5. Number of bins to calculate RMS from \n" \
+    "6. SNR threshold at which we define signal")
     sys.exit(1)
 
-trace_folder = sys.argv[1]
-foldername = sys.argv[2]
+fn = sys.argv[1]
+trim = int(sys.argv[2])
+dur = int(sys.argv[3])
+sig_window = int(sys.argv[4])
+rms_window = int(sys.argv[5])
+threshold = float(sys.argv[6])
+
+evt_name = fn.rsplit('/', 1)[-1].split('.', 1)[0]
+foldername = ""+evt_name+f"_{dur}"
 dirname = os.path.join(bigfolder, foldername)
-trim = int(sys.argv[3])
-dur = int(sys.argv[4])
-sig_window = int(sys.argv[5])
-size = int(sys.argv[6])
 
 print("Output Directory %s" % dirname, flush=True)
 if os.path.exists(dirname) == False:
     os.mkdir(dirname)
 
 #Read trace
-traces, stns, chns = read_files(size, trace_folder, trim)
+raw_trs = read_file(fn)
 
 # Print time
 middle = time.time()
@@ -257,19 +177,35 @@ fn_time = os.path.join(dirname, "time.txt")
 with open(fn_time, 'w') as f:
     f.write(f"Read data: {elapsed}\n")
 
+# check empty channels
+check_empty_channels(raw_trs, fn_time)
+
+# Modify data
+trs = modify_data(raw_trs, trim)
+
 # Make covariance matrix
-covs, N = get_covs(traces, size, dur, sig_window, dirname)
+add_timestamp(start, fn_time, "Making Covariance Matrix")
+cov, N = make_cov(trs, dur, sig_window, rms_window, threshold, fn_time)
+cov_name = f"Cov.npy"
+fn_cov = os.path.join(dirname, cov_name)
+np.save(fn_cov, cov)
+add_timestamp(start, fn_time, "Finished making matrix")
+
+print(f"Number of Realization: {N}", flush=True)
+with open(fn_time, 'a') as f:
+    f.write(f"Number of Realization: {N} \n")
 
 # Plots
-draw_cov(covs, size, N, dur, stns, chns, dirname)
-x_time = traces[0,0] # For x-axis (Maybe I should check that all traces[i,0] are the same)
-draw_1D(covs, size, x_time, dur, stns, chns, dirname)
-overplot_1D(covs, size, x_time, dur, stns, chns, dirname)
+# Heatmap
+add_timestamp(start, fn_time, "Drawing Covariance Matrix")
+draw_cov(cov, N, dur, dirname, evt_name)
+add_timestamp(start, fn_time, "Finished Drawing Matrix")
+
+add_timestamp(start, fn_time, "Drawing 1D plot")
+with h5py.File(fn, 'r') as f:
+    x_time = f["times"][0,1,0] # For x-axis (Maybe I should check that all traces[i,0] are the same)
+draw_1D(cov, x_time, dur, dirname, evt_name)
+add_timestamp(start, fn_time, "Finished Drawing 1D plot")
 
 # Print time
-middle = time.time()
-elapsed = middle-start
-print(f"Finished Everything: {elapsed}", flush=True)
-fn_time = os.path.join(dirname, "time.txt")
-with open(fn_time, 'a') as f:
-    f.write(f"Finished Everything: {elapsed}\n")
+add_timestamp(start, fn_time, "Finished Everything")
