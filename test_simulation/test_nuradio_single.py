@@ -410,25 +410,27 @@ class NuRadioRecoReader:
                     plt.clf()
 
                 # calculate Vrms and normalize such that after filtering the correct Vrms is obtained
-                min_freq = 0
-                max_freq = 0.5 * self.det.get_sampling_frequency(station.get_id(), station.get_channel_ids()[0])
-                ff = np.linspace(0, max_freq, 10000)
-                filt = self.channelBandPassFilter.get_filter(
-                    ff, station.get_id(), None, self.det, **self.filter_settings
-                )
-                bandwidth = np.trapezoid(np.abs(filt) ** 2, ff)
-                Vrms = (Tnoise * 50 * constants.k * bandwidth / units.Hz) ** 0.5
-                amplitude = Vrms / (bandwidth / max_freq) ** 0.5
-                print(f"Calculated Vrms: {Vrms:.2e} V, applying noise with amplitude {amplitude:.2e} V")
-                self.channelGenericNoiseAdder.run(
-                    evt,
-                    station,
-                    self.det,
-                    type="rayleigh",
-                    amplitude=amplitude,
-                    min_freq=min_freq,
-                    max_freq=max_freq,
-                )
+                # COMMENTED TO GENERATE PURE SIGNAL
+                # min_freq = 0
+                # max_freq = 0.5 * self.det.get_sampling_frequency(station.get_id(), station.get_channel_ids()[0])
+                # ff = np.linspace(0, max_freq, 10000)
+                # filt = self.channelBandPassFilter.get_filter(
+                #     ff, station.get_id(), None, self.det, **self.filter_settings
+                # )
+                # bandwidth = np.trapezoid(np.abs(filt) ** 2, ff)
+                # Vrms = (Tnoise * 50 * constants.k * bandwidth / units.Hz) ** 0.5
+                # amplitude = Vrms / (bandwidth / max_freq) ** 0.5
+                # print(f"Calculated Vrms: {Vrms:.2e} V, applying noise with amplitude {amplitude:.2e} V")
+                # self.channelGenericNoiseAdder.run(
+                #     evt,
+                #     station,
+                #     self.det,
+                #     type="rayleigh",
+                #     amplitude=amplitude,
+                #     min_freq=min_freq,
+                #     max_freq=max_freq,
+                # )
+                # UP TO HERE
 
                 # self.channelGalacticNoiseAdder.run(
                 #     evt, station, self.det, passband=self.filter_settings['passband']
@@ -452,56 +454,60 @@ class NuRadioRecoReader:
 
                     plt.clf()
 
-                self.triggerSimulator.run(
-                    evt, station, self.det, number_concidences=1, threshold=10 * Vrms
-                )
-                if station.get_trigger("default_simple_threshold").has_triggered():
-                    self.eventTypeIdentifier.run(evt, station, "forced", "cosmic_ray")
+                # AND FROM HERE
 
-                    self.channelSignalReconstructor.run(evt, station, self.det)
+                # self.triggerSimulator.run(
+                #     evt, station, self.det, number_concidences=1, threshold=10 * Vrms
+                # )
+                # if station.get_trigger("default_simple_threshold").has_triggered():
+                #     self.eventTypeIdentifier.run(evt, station, "forced", "cosmic_ray")
 
-                    if iplot == plot_idx:
-                        fig, ax = plt.subplots()
+                #     self.channelSignalReconstructor.run(evt, station, self.det)
 
-                        for ichannel, channel in enumerate(station.iter_channels()):
-                            trace = channel.get_trace() / units.V
-                            times = channel.get_times()
-                            ax.plot(times, trace, label=f'Pol {ichannel}', color=plot_colors[ichannel])
+                #     if iplot == plot_idx:
+                #         fig, ax = plt.subplots()
 
-                        ax.set_xlabel("Time / ns", fontsize=16)
-                        ax.set_ylabel("Voltage / V", fontsize=16)
-                        ax.legend(fontsize=12)
+                #         for ichannel, channel in enumerate(station.iter_channels()):
+                #             trace = channel.get_trace() / units.V
+                #             times = channel.get_times()
+                #             ax.plot(times, trace, label=f'Pol {ichannel}', color=plot_colors[ichannel])
 
-                        ax.tick_params(axis='both', which='major', labelsize=14, size=6)
+                #         ax.set_xlabel("Time / ns", fontsize=16)
+                #         ax.set_ylabel("Voltage / V", fontsize=16)
+                #         ax.legend(fontsize=12)
 
-                        fig.savefig("./after_trigger_voltage.pdf", dpi=200, bbox_inches='tight')
+                #         ax.tick_params(axis='both', which='major', labelsize=14, size=6)
 
-                        plt.clf()
+                #         fig.savefig("./after_trigger_voltage.pdf", dpi=200, bbox_inches='tight')
+
+                #         plt.clf()
                     
-                    # reconstruct the electric field for each dual-polarized antenna through standard unfolding
-                    self.voltageToEfieldConverter.run(evt, station, self.det, use_channels=station.get_channel_ids(), use_MC_direction=True)
+                #     # reconstruct the electric field for each dual-polarized antenna through standard unfolding
+                #     self.voltageToEfieldConverter.run(evt, station, self.det, use_channels=station.get_channel_ids(), use_MC_direction=True)
 
-                    if iplot == plot_idx:
-                        fig, ax = plt.subplots()
-                        for iefield, efield in enumerate(station.get_electric_fields()):
-                            traces = efield.get_trace()/(units.V / units.m)
-                            times = efield.get_times()
+                #     if iplot == plot_idx:
+                #         fig, ax = plt.subplots()
+                #         for iefield, efield in enumerate(station.get_electric_fields()):
+                #             traces = efield.get_trace()/(units.V / units.m)
+                #             times = efield.get_times()
 
-                            for itr, tr in enumerate(traces):
-                                ax.plot(times, tr, label=f"Pol {itr}", color=plot_colors[itr])
-                        ax.set_xlabel("Time / ns", fontsize=16)
-                        ax.set_ylabel("Electric Field / (V/m)", fontsize=16)
-                        ax.legend(fontsize=12)
+                #             for itr, tr in enumerate(traces):
+                #                 ax.plot(times, tr, label=f"Pol {itr}", color=plot_colors[itr])
+                #         ax.set_xlabel("Time / ns", fontsize=16)
+                #         ax.set_ylabel("Electric Field / (V/m)", fontsize=16)
+                #         ax.legend(fontsize=12)
 
-                        ax.tick_params(axis='both', which='major', labelsize=14, size=6)
+                #         ax.tick_params(axis='both', which='major', labelsize=14, size=6)
 
 
-                        fig.savefig("./after_efield_reco_efield.pdf", dpi=200, bbox_inches='tight')
+                #         fig.savefig("./after_efield_reco_efield.pdf", dpi=200, bbox_inches='tight')
 
-                        antenna_position = self.det.get_absolute_position(station.get_id()) + self.det.get_relative_position(station.get_id(), channel.get_id())
-                        print(f"Antenna POsition: {antenna_position}")
+                #         antenna_position = self.det.get_absolute_position(station.get_id()) + self.det.get_relative_position(station.get_id(), channel.get_id())
+                #         print(f"Antenna POsition: {antenna_position}")
 
-                        # raise Exception("Stop after plotting the reconstructed electric field for a single station.")
+                #         # raise Exception("Stop after plotting the reconstructed electric field for a single station.")
+
+                # TO HERE
 
 
                 iplot += 1
