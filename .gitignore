@@ -7,3 +7,4 @@ traces_127417834*
 plots_after_noise*
 *__pycache__*
 hdf5_files*
+test_cov/data/*
