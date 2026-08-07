@@ -8,3 +8,4 @@ plots_after_noise*
 *__pycache__*
 hdf5_files*
 test_cov/data/*
+*/antenna_response_ska/*
