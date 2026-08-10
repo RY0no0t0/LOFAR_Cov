@@ -447,9 +447,9 @@ class NuRadioRecoReader:
                     excluded_channels=exclude
                 )
 
-                # self.channelGalacticNoiseAdder.run(
-                #     evt, station, self.det, passband=self.filter_settings['passband'], excluded_channels=exclude
-                # )
+                self.channelGalacticNoiseAdder.run(
+                    evt, station, self.det, passband=self.filter_settings['passband'], excluded_channels=exclude
+                )
 
                 if iplot == plot_idx:
                     fig, ax = plt.subplots()
