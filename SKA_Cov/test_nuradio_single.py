@@ -19,6 +19,7 @@ import NuRadioReco.modules.electricFieldBandPassFilter
 import NuRadioReco.modules.electricFieldSignalReconstructor
 import NuRadioReco.modules.efieldGalacticNoiseAdder
 import NuRadioReco.modules.channelGalacticNoiseAdder
+import NuRadioReco.modules.channelResampler
 import NuRadioReco.modules.efieldToVoltageConverter
 import NuRadioReco.modules.channelGenericNoiseAdder
 import NuRadioReco.modules.trigger.simpleThreshold
@@ -300,6 +301,9 @@ class NuRadioRecoReader:
         self.voltageToEfieldConverter = NuRadioReco.modules.voltageToEfieldConverter.voltageToEfieldConverter()
         self.voltageToEfieldConverter.begin()
 
+        self.channelResampler = NuRadioReco.modules.channelResampler.channelResampler()
+        self.channelResampler.begin()
+
         self.coreas_reader = readCoREASDetector.readCoREASDetector()
 
     def read_data_event_with_noise(
@@ -395,6 +399,9 @@ class NuRadioRecoReader:
                     fig.savefig("./after_efield_voltage_voltage.pdf", dpi=200, bbox_inches='tight')
 
                     plt.clf()
+
+                # channelResampler
+                self.channelResampler.run(evt, station, self.det, **self.filter_settings)
 
                 # approximate the rest of the signal chain with a bandpass filter
                 self.channelBandPassFilter.run(evt, station, self.det, **self.filter_settings)
