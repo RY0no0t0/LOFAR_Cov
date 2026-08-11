@@ -401,7 +401,7 @@ class NuRadioRecoReader:
                     plt.clf()
 
                 # channelResampler
-                self.channelResampler.run(evt, station, self.det, **self.filter_settings)
+                self.channelResampler.run(evt, station, self.det)
 
                 # approximate the rest of the signal chain with a bandpass filter
                 self.channelBandPassFilter.run(evt, station, self.det, **self.filter_settings)
