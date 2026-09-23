@@ -1,0 +1,56 @@
+#! /bin/bash
+#SBATCH --ntasks=10
+#SBATCH --output=results/allchan_ska/%j.txt
+#SBATCH --error=results/allchan_ska/%j.err
+#SBATCH --mail-user=rkatahira27@amherst.edu
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+
+# Reconstruction of all channels with a covariance matrix read from a file.
+# The channels are split over the tasks, and the chunks are put back together with
+# ./merge_chunks.py allchan_ska
+#
+# The size of the matrix must match the number of bins of the traces:
+#   SKA-low : Cov is 800x800 (1.25 ns bins, 50-350 MHz) -> needs SKA-low traces of 800 bins
+#   LOFAR   : Cov is 200x200 (5 ns bins, 30-80 MHz)     -> works with the traces of all channels
+# The SKA-low traces of all channels do not exist yet, and the window priors in all_chan.py
+# (window_pos, window_width) are written for the 1000 ns grid of LOFAR.
+
+# Check for the results directory, and if it isn't present, create it:
+if [[ ! -d 'results/allchan_ska' ]]; then mkdir 'results/allchan_ska'; fi
+
+conda init
+conda activate rise
+
+# Every task gets the whole node otherwise, and they would fight over the cores:
+export OMP_NUM_THREADS=1
+
+# Arguments of all_chan.py:
+cov_type='file'
+cov_file='../SKA_Cov/results/200K_1000samples_size800/Cov.npy'
+data='data/traces_allchan_ska_800.npy'
+truth='data/true_allchan_ska_800.npy'
+bins='data/time_800.npy'
+out='allchan_ska'
+
+# Simulated LOFAR covariance on the traces that already exist:
+# cov_file='../SKA_Cov/results/LOFAR_200K_1000samples_size200/Cov.npy'
+# data='data/traces_allchan_200.npy'
+# truth='data/true_allchan_200.npy'
+# bins='data/time_200.npy'
+# out='allchan_lofar_sim'
+
+# Number of channels in the data, read with python inside ` `:
+tot=`python -c "import numpy as np; print(len(np.load('$data', mmap_mode='r')))"`
+
+# Here loops through i running from 0 to ntasks-1, one chunk of channels each:
+for i in `seq 0 $(($SLURM_NTASKS-1))`
+do
+    # First channel and number of channels of the chunk, as all_chan.py wants them:
+    chunk=`python -c "print(f'{$i*$tot//$SLURM_NTASKS},{($i+1)*$tot//$SLURM_NTASKS - $i*$tot//$SLURM_NTASKS}')"`
+    srun --overlap -N 1 -n 1 \
+        -o results/allchan_ska/%t.txt \
+        -e results/allchan_ska/%t.err \
+        ./all_chan.py $cov_type $cov_file $data $truth $bins $out $chunk &
+done
+wait

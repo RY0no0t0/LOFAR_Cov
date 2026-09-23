@@ -1,0 +1,43 @@
+#! /bin/bash
+#SBATCH --ntasks=10
+#SBATCH --output=results/allchan_nondiag/%j.txt
+#SBATCH --error=results/allchan_nondiag/%j.err
+#SBATCH --mail-user=rkatahira27@amherst.edu
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+
+# Reconstruction of all channels with the full (non-diagonal) covariance matrix.
+# The channels are split over the tasks, and the chunks are put back together with
+# ./merge_chunks.py allchan_nondiag
+
+# Check for the results directory, and if it isn't present, create it:
+if [[ ! -d 'results/allchan_nondiag' ]]; then mkdir 'results/allchan_nondiag'; fi
+
+conda init
+conda activate rise
+
+# Every task gets the whole node otherwise, and they would fight over the cores:
+export OMP_NUM_THREADS=1
+
+# Arguments of all_chan.py:
+cov_type='nondiag'
+cov_file='model'
+data='data/traces_allchan_200.npy'
+truth='data/true_allchan_200.npy'
+bins='data/time_200.npy'
+out='allchan_nondiag'
+
+# Number of channels in the data, read with python inside ` `:
+tot=`python -c "import numpy as np; print(len(np.load('$data', mmap_mode='r')))"`
+
+# Here loops through i running from 0 to ntasks-1, one chunk of channels each:
+for i in `seq 0 $(($SLURM_NTASKS-1))`
+do
+    # First channel and number of channels of the chunk, as all_chan.py wants them:
+    chunk=`python -c "print(f'{$i*$tot//$SLURM_NTASKS},{($i+1)*$tot//$SLURM_NTASKS - $i*$tot//$SLURM_NTASKS}')"`
+    srun --overlap -N 1 -n 1 \
+        -o results/allchan_nondiag/%t.txt \
+        -e results/allchan_nondiag/%t.err \
+        ./all_chan.py $cov_type $cov_file $data $truth $bins $out $chunk &
+done
+wait

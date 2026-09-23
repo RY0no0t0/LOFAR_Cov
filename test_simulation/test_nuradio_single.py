@@ -420,6 +420,14 @@ class NuRadioRecoReader:
                 Vrms = (Tnoise * 50 * constants.k * bandwidth / units.Hz) ** 0.5
                 amplitude = Vrms / (bandwidth / max_freq) ** 0.5
                 print(f"Calculated Vrms: {Vrms:.2e} V, applying noise with amplitude {amplitude:.2e} V")
+                wanted = selected_station_channel_ids[station.get_id()]
+                
+                exclude = [
+                    ch
+                    for ch in station.get_channel_ids()
+                    if ch not in wanted
+                ]
+
                 self.channelGenericNoiseAdder.run(
                     evt,
                     station,
@@ -428,11 +436,12 @@ class NuRadioRecoReader:
                     amplitude=amplitude,
                     min_freq=min_freq,
                     max_freq=max_freq,
+                    excluded_channels=exclude
                 )
 
-                # self.channelGalacticNoiseAdder.run(
-                #     evt, station, self.det, passband=self.filter_settings['passband']
-                # )
+                self.channelGalacticNoiseAdder.run(
+                    evt, station, self.det, passband=self.filter_settings['passband'], excluded_channels=exclude
+                )
 
                 if iplot == plot_idx:
                     fig, ax = plt.subplots()
