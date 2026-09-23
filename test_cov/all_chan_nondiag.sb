@@ -36,8 +36,8 @@ do
     # First channel and number of channels of the chunk, as all_chan.py wants them:
     chunk=`python -c "print(f'{$i*$tot//$SLURM_NTASKS},{($i+1)*$tot//$SLURM_NTASKS - $i*$tot//$SLURM_NTASKS}')"`
     srun --overlap -N 1 -n 1 \
-        -o results/allchan_nondiag/%t.txt \
-        -e results/allchan_nondiag/%t.err \
+        -o results/allchan_nondiag/$i.txt \
+        -e results/allchan_nondiag/$i.err \
         ./all_chan.py $cov_type $cov_file $data $truth $bins $out $chunk &
 done
 wait
